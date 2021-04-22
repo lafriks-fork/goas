@@ -73,6 +73,7 @@ type OperationObject struct {
 	Responses ResponsesObject `json:"responses"` // Required
 
 	Tags        []string           `json:"tags,omitempty"`
+	OperationID string             `json:"operationId,omitempty"`
 	Summary     string             `json:"summary,omitempty"`
 	Description string             `json:"description,omitempty"`
 	Parameters  []ParameterObject  `json:"parameters,omitempty"`
@@ -144,6 +145,13 @@ type SchemaObject struct {
 	Items       *SchemaObject          `json:"items,omitempty"` // use ptr to prevent recursive error
 	Example     interface{}            `json:"example,omitempty"`
 	Deprecated  bool                   `json:"deprecated,omitempty"`
+	Nullable    bool                   `json:"nullable,omitempty"`
+	Minimum     *int64                 `json:"minimum,omitempty"`
+	Maximum     *int64                 `json:"maximum,omitempty"`
+	MinLength   *int64                 `json:"minLength,omitempty"`
+	MaxLength   *int64                 `json:"maxLength,omitempty"`
+	MinItems    *int64                 `json:"minItems,omitempty"`
+	MaxItems    *int64                 `json:"maxItems,omitempty"`
 
 	// Ref is used when SchemaObject is as a ReferenceObject
 	Ref string `json:"$ref,omitempty"`

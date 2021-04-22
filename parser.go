@@ -307,7 +307,7 @@ func (p *parser) parseInfo() error {
 					case "apiKey":
 						scheme.In = fields[2]
 						scheme.Name = fields[3]
-						scheme.Description = strings.Join(fields[4:], "")
+						scheme.Description = strings.Join(fields[4:], " ")
 					case "openIdConnect":
 						scheme.OpenIdConnectUrl = fields[2]
 						scheme.Description = strings.Join(fields[3:], " ")
@@ -653,8 +653,10 @@ func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comm
 		switch strings.ToLower(attribute) {
 		case "@title":
 			operation.Summary = strings.TrimSpace(comment[len(attribute):])
+		case "@operationid":
+			operation.OperationID = strings.TrimSpace(comment[len(attribute):])
 		case "@description":
-			operation.Description = strings.Join([]string{operation.Description, strings.TrimSpace(comment[len(attribute):])}, " ")
+			operation.Description = strings.TrimSpace(strings.Join([]string{operation.Description, strings.TrimSpace(comment[len(attribute):])}, " "))
 		case "@param":
 			err = p.parseParamComment(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
 		case "@success", "@failure":
@@ -743,7 +745,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 		}
 		if goType == "time.Time" {
 			var err error
-			parameterObject.Schema, err = p.parseSchemaObject(pkgPath, pkgName, goType)
+			parameterObject.Schema, err = p.parseSchemaObject("", pkgPath, pkgName, goType)
 			if err != nil {
 				p.debug("parseResponseComment cannot parse goType", goType)
 			}
@@ -767,7 +769,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 	}
 
 	if strings.HasPrefix(goType, "[]") || strings.HasPrefix(goType, "map[]") || goType == "time.Time" {
-		schema, err := p.parseSchemaObject(pkgPath, pkgName, goType)
+		schema, err := p.parseSchemaObject(name, pkgPath, pkgName, goType)
 		if err != nil {
 			p.debug("parseResponseComment cannot parse goType", goType)
 		}
@@ -775,7 +777,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 			Schema: *schema,
 		}
 	} else {
-		typeName, err := p.registerType(pkgPath, pkgName, matches[3])
+		typeName, err := p.registerType(name, pkgPath, pkgName, matches[3])
 		if err != nil {
 			return err
 		}
@@ -800,9 +802,9 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *OperationObject, comment string) error {
 	// {status}  {jsonType}  {goType}     {description}
 	// 201       object      models.User  "User Model"
-	re := regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/\[\]]+)[^"]*(.*)?`)
+	re := regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/\[\]]+[\s]+)?[^"]*(.*)?`)
 	matches := re.FindStringSubmatch(comment)
-	if len(matches) != 5 {
+	if len(matches) < 2 {
 		return fmt.Errorf("parseResponseComment can not parse response comment \"%s\"", comment)
 	}
 
@@ -811,42 +813,50 @@ func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *Operat
 	if err != nil {
 		return fmt.Errorf("parseResponseComment: http status must be int, but got %s", status)
 	}
-	switch matches[2] {
-	case "object", "array", "{object}", "{array}":
-	default:
-		return fmt.Errorf("parseResponseComment: invalid jsonType %s", matches[2])
-	}
+
 	responseObject := &ResponseObject{
 		Content: map[string]*MediaTypeObject{},
 	}
-	responseObject.Description = strings.Trim(matches[4], "\"")
 
-	re = regexp.MustCompile(`\[\w*\]`)
-	goType := re.ReplaceAllString(matches[3], "[]")
-	if strings.HasPrefix(goType, "[]") || strings.HasPrefix(goType, "map[]") {
-		schema, err := p.parseSchemaObject(pkgPath, pkgName, goType)
-		if err != nil {
-			p.debug("parseResponseComment cannot parse goType", goType)
+	matches[2] = strings.Trim(strings.TrimSpace(matches[2]), "{}")
+	matches[3] = strings.TrimSpace(matches[3])
+
+	switch matches[2] {
+	case "empty":
+		if len(matches) > 2 {
+			responseObject.Description = strings.Trim(matches[3], "\"")
 		}
-		responseObject.Content[ContentTypeJson] = &MediaTypeObject{
-			Schema: *schema,
+	default:
+		if len(matches) > 3 {
+			responseObject.Description = strings.Trim(matches[4], "\"")
 		}
-	} else {
-		typeName, err := p.registerType(pkgPath, pkgName, matches[3])
-		if err != nil {
-			return err
-		}
-		if isBasicGoType(typeName) {
-			responseObject.Content[ContentTypeText] = &MediaTypeObject{
-				Schema: SchemaObject{
-					Type: "string",
-				},
+		re = regexp.MustCompile(`\[\w*\]`)
+		goType := re.ReplaceAllString(matches[3], "[]")
+		if strings.HasPrefix(goType, "[]") || strings.HasPrefix(goType, "map[]") {
+			schema, err := p.parseSchemaObject(matches[2], pkgPath, pkgName, goType)
+			if err != nil {
+				p.debug("parseResponseComment cannot parse goType", goType)
+			}
+			responseObject.Content[ContentTypeJson] = &MediaTypeObject{
+				Schema: *schema,
 			}
 		} else {
-			responseObject.Content[ContentTypeJson] = &MediaTypeObject{
-				Schema: SchemaObject{
-					Ref: addSchemaRefLinkPrefix(typeName),
-				},
+			typeName, err := p.registerType(matches[2], pkgPath, pkgName, matches[3])
+			if err != nil {
+				return err
+			}
+			if isBasicGoType(typeName) {
+				responseObject.Content[ContentTypeText] = &MediaTypeObject{
+					Schema: SchemaObject{
+						Type: "string",
+					},
+				}
+			} else {
+				responseObject.Content[ContentTypeJson] = &MediaTypeObject{
+					Schema: SchemaObject{
+						Ref: addSchemaRefLinkPrefix(typeName),
+					},
+				}
 			}
 		}
 	}
@@ -862,7 +872,7 @@ func (p *parser) parseRouteComment(operation *OperationObject, comment string) e
 	re := regexp.MustCompile(`([\w\.\/\-{}]+)[^\[]+\[([^\]]+)`)
 	matches := re.FindStringSubmatch(sourceString)
 	if len(matches) != 3 {
-		return fmt.Errorf("Can not parse router comment \"%s\", skipped", comment)
+		return fmt.Errorf("can not parse router comment \"%s\", skipped", comment)
 	}
 
 	_, ok := p.OpenAPI.Paths[matches[1]]
@@ -892,15 +902,15 @@ func (p *parser) parseRouteComment(operation *OperationObject, comment string) e
 	return nil
 }
 
-func (p *parser) registerType(pkgPath, pkgName, typeName string) (string, error) {
+func (p *parser) registerType(name, pkgPath, pkgName, typeName string) (string, error) {
 	var registerTypeName string
 
 	if isBasicGoType(typeName) {
 		registerTypeName = typeName
-	} else if _, ok := p.KnownIDSchema[genSchemeaObjectID(pkgName, typeName)]; ok {
-		return genSchemeaObjectID(pkgName, typeName), nil
+	} else if _, ok := p.KnownIDSchema[genSchemeaObjectID(name, pkgName, typeName)]; ok {
+		return genSchemeaObjectID(name, pkgName, typeName), nil
 	} else {
-		schemaObject, err := p.parseSchemaObject(pkgPath, pkgName, typeName)
+		schemaObject, err := p.parseSchemaObject(name, pkgPath, pkgName, typeName)
 		if err != nil {
 			return "", err
 		}
@@ -913,7 +923,7 @@ func (p *parser) registerType(pkgPath, pkgName, typeName string) (string, error)
 	return registerTypeName, nil
 }
 
-func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaObject, error) {
+func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*SchemaObject, error) {
 	var typeSpec *ast.TypeSpec
 	var exist bool
 	var schemaObject SchemaObject
@@ -923,12 +933,12 @@ func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaOb
 	if strings.HasPrefix(typeName, "[]") {
 		schemaObject.Type = "array"
 		itemTypeName := typeName[2:]
-		schema, ok := p.KnownIDSchema[genSchemeaObjectID(pkgName, itemTypeName)]
+		schema, ok := p.KnownIDSchema[genSchemeaObjectID(name, pkgName, itemTypeName)]
 		if ok {
 			schemaObject.Items = &SchemaObject{Ref: addSchemaRefLinkPrefix(schema.ID)}
 			return &schemaObject, nil
 		}
-		schemaObject.Items, err = p.parseSchemaObject(pkgPath, pkgName, itemTypeName)
+		schemaObject.Items, err = p.parseSchemaObject(name, pkgPath, pkgName, itemTypeName)
 		if err != nil {
 			return nil, err
 		}
@@ -936,12 +946,12 @@ func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaOb
 	} else if strings.HasPrefix(typeName, "map[]") {
 		schemaObject.Type = "object"
 		itemTypeName := typeName[5:]
-		schema, ok := p.KnownIDSchema[genSchemeaObjectID(pkgName, itemTypeName)]
+		schema, ok := p.KnownIDSchema[genSchemeaObjectID(name, pkgName, itemTypeName)]
 		if ok {
 			schemaObject.Items = &SchemaObject{Ref: addSchemaRefLinkPrefix(schema.ID)}
 			return &schemaObject, nil
 		}
-		schemaProperty, err := p.parseSchemaObject(pkgPath, pkgName, itemTypeName)
+		schemaProperty, err := p.parseSchemaObject(name, pkgPath, pkgName, itemTypeName)
 		if err != nil {
 			return nil, err
 		}
@@ -967,7 +977,7 @@ func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaOb
 			log.Fatalf("Can not find definition of %s ast.TypeSpec. Current package %s", typeName, pkgName)
 		}
 		schemaObject.PkgName = pkgName
-		schemaObject.ID = genSchemeaObjectID(pkgName, typeName)
+		schemaObject.ID = genSchemeaObjectID(name, pkgName, typeName)
 		p.KnownIDSchema[schemaObject.ID] = &schemaObject
 	} else {
 		guessPkgName := strings.Join(typeNameParts[:len(typeNameParts)-1], "/")
@@ -1007,7 +1017,7 @@ func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaOb
 				return &schemaObject, nil
 			}
 			schemaObject.PkgName = guessPkgName
-			schemaObject.ID = genSchemeaObjectID(guessPkgName, guessTypeName)
+			schemaObject.ID = genSchemeaObjectID(name, guessPkgName, guessTypeName)
 			p.KnownIDSchema[schemaObject.ID] = &schemaObject
 		}
 		pkgPath, pkgName = guessPkgPath, guessPkgName
@@ -1026,7 +1036,7 @@ func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaOb
 		typeAsString := p.getTypeAsString(astArrayType.Elt)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if !isBasicGoType(typeAsString) {
-			schemaItemsSchemeaObjectID, err := p.registerType(pkgPath, pkgName, typeAsString)
+			schemaItemsSchemeaObjectID, err := p.registerType("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug("parseSchemaObject parse array items err:", err)
 			} else {
@@ -1043,7 +1053,7 @@ func (p *parser) parseSchemaObject(pkgPath, pkgName, typeName string) (*SchemaOb
 		typeAsString := p.getTypeAsString(astMapType.Value)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if !isBasicGoType(typeAsString) {
-			schemaItemsSchemeaObjectID, err := p.registerType(pkgPath, pkgName, typeAsString)
+			schemaItemsSchemeaObjectID, err := p.registerType("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug("parseSchemaObject parse array items err:", err)
 			} else {
@@ -1084,34 +1094,36 @@ astFieldsLoop:
 			continue
 		}
 		fieldSchema := &SchemaObject{}
+		isArray := false
 		typeAsString := p.getTypeAsString(astField.Type)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if strings.HasPrefix(typeAsString, "[]") {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			isArray = true
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if strings.HasPrefix(typeAsString, "map[]") {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if typeAsString == "time.Time" {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if strings.HasPrefix(typeAsString, "interface{}") {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if !isBasicGoType(typeAsString) {
-			fieldSchemaSchemeaObjectID, err := p.registerType(pkgPath, pkgName, typeAsString)
+			fieldSchemaSchemeaObjectID, err := p.registerType("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug("parseSchemaPropertiesFromStructFields err:", err)
 			} else {
@@ -1125,6 +1137,7 @@ astFieldsLoop:
 				}
 				fieldSchema.Ref = addSchemaRefLinkPrefix(fieldSchemaSchemeaObjectID)
 			}
+			//fieldSchema.AdditionalProperties = false
 		} else if isGoTypeOASType(typeAsString) {
 			fieldSchema.Type = goTypesOASTypes[typeAsString]
 		}
@@ -1212,11 +1225,57 @@ astFieldsLoop:
 				}
 			}
 
+			if validate := astFieldTag.Get("validate"); validate != "" {
+				validations := strings.Split(validate, ",")
+				for _, v := range validations {
+					pt := strings.SplitN(v, "=", 2)
+					switch pt[0] {
+					case "required":
+						isRequired = true
+					case "uuid_rfc4122":
+						fieldSchema.Format = "uuid"
+					case "min":
+						if i, err := strconv.ParseInt(pt[1], 10, 64); err != nil {
+							p.debug(err)
+							return
+						} else {
+							if isArray {
+								fieldSchema.MinItems = &i
+								if i == 0 {
+									fieldSchema.Nullable = true
+								}
+							} else if fieldSchema.Type == "string" {
+								fieldSchema.MinLength = &i
+							} else {
+								fieldSchema.Minimum = &i
+							}
+						}
+					case "max":
+						if i, err := strconv.ParseInt(pt[1], 10, 64); err != nil {
+							p.debug(err)
+							return
+						} else {
+							if isArray {
+								fieldSchema.MaxItems = &i
+							} else if fieldSchema.Type == "string" {
+								fieldSchema.MaxLength = &i
+							} else {
+								fieldSchema.Maximum = &i
+							}
+						}
+					}
+				}
+			}
+
 			if _, ok := astFieldTag.Lookup("required"); ok || isRequired {
 				structSchema.Required = append(structSchema.Required, name)
 			}
 
-			if desc := astFieldTag.Get("description"); desc != "" {
+			if astField.Doc != nil && len(strings.TrimSpace(astField.Doc.Text())) != 0 {
+				fieldSchema.Description = strings.TrimSpace(astField.Doc.Text())
+			}
+
+			if desc := astFieldTag.Get("description"); len(desc) != 0 {
 				fieldSchema.Description = desc
 			}
 		}
@@ -1231,31 +1290,31 @@ astFieldsLoop:
 		typeAsString := p.getTypeAsString(astField.Type)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if strings.HasPrefix(typeAsString, "[]") {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if strings.HasPrefix(typeAsString, "map[]") {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if typeAsString == "time.Time" {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if strings.HasPrefix(typeAsString, "interface{}") {
-			fieldSchema, err = p.parseSchemaObject(pkgPath, pkgName, typeAsString)
+			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
 				return
 			}
 		} else if !isBasicGoType(typeAsString) {
-			fieldSchemaSchemeaObjectID, err := p.registerType(pkgPath, pkgName, typeAsString)
+			fieldSchemaSchemeaObjectID, err := p.registerType("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug("parseSchemaPropertiesFromStructFields err:", err)
 			} else {
