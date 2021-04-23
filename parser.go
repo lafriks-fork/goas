@@ -1,4 +1,4 @@
-package main
+package goas
 
 import (
 	"encoding/json"
@@ -53,7 +53,7 @@ type pkg struct {
 	Path string
 }
 
-func newParser(modulePath, mainFilePath, handlerPath string, debug bool) (*parser, error) {
+func NewParser(modulePath, mainFilePath, handlerPath string, debug bool) (*parser, error) {
 	p := &parser{
 		KnownPkgs:               []pkg{},
 		KnownNamePkg:            map[string]*pkg{},

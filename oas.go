@@ -1,4 +1,4 @@
-package main
+package goas
 
 import "github.com/iancoleman/orderedmap"
 
