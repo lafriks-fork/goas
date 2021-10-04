@@ -823,7 +823,9 @@ func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *Operat
 
 	switch matches[2] {
 	case "empty":
-		if len(matches) > 2 {
+		if len(matches) > 3 {
+			responseObject.Description = strings.Trim(matches[4], "\"")
+		} else if len(matches) > 2 {
 			responseObject.Description = strings.Trim(matches[3], "\"")
 		}
 	default:
