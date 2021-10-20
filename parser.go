@@ -636,6 +636,7 @@ func (p *parser) parsePaths() error {
 func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comment) error {
 	operation := &OperationObject{
 		Responses: map[string]*ResponseObject{},
+		Headers:   orderedmap.New(),
 	}
 	if !strings.HasPrefix(pkgPath, p.ModulePath) {
 		// ignore this pkgName
@@ -658,6 +659,8 @@ func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comm
 			operation.OperationID = strings.TrimSpace(comment[len(attribute):])
 		case "@description":
 			operation.Description = strings.TrimSpace(strings.Join([]string{operation.Description, strings.TrimSpace(comment[len(attribute):])}, " "))
+		case "@header":
+			err = p.parseResponseHeader(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
 		case "@param":
 			err = p.parseParamComment(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
 		case "@success", "@failure":
@@ -676,6 +679,40 @@ func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comm
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (p *parser) parseResponseHeader(pkgPath, pkgName string, operation *OperationObject, comment string) error {
+	// {name}       {goType}  {description}
+	// X-TotalCount int       "Total record count"
+	re := regexp.MustCompile(`([-\w]+)[\s]+([\w./\[\]]+)[\s]+"([^"]+)"`)
+	matches := re.FindStringSubmatch(comment)
+	if len(matches) != 4 {
+		return fmt.Errorf("parseResponseHeader can not parse header comment \"%s\"", comment)
+	}
+
+	name := matches[1]
+	re = regexp.MustCompile(`\[\w*\]`)
+	goType := re.ReplaceAllString(matches[2], "[]")
+	description := matches[3]
+
+	headerObject := ResponseHeaderObject{
+		Description: description,
+	}
+	if goType == "time.Time" {
+		var err error
+		headerObject.Schema, err = p.parseSchemaObject("", pkgPath, pkgName, goType)
+		if err != nil {
+			p.debug("parseResponseComment cannot parse goType", goType)
+		}
+		operation.Headers.Set(name, headerObject)
+	} else if isGoTypeOASType(goType) {
+		headerObject.Schema = &SchemaObject{
+			Type:   goTypesOASTypes[goType],
+			Format: goTypesOASFormats[goType],
+		}
+		operation.Headers.Set(name, headerObject)
 	}
 	return nil
 }

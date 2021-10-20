@@ -72,12 +72,13 @@ type PathItemObject struct {
 type OperationObject struct {
 	Responses ResponsesObject `json:"responses"` // Required
 
-	Tags        []string           `json:"tags,omitempty"`
-	OperationID string             `json:"operationId,omitempty"`
-	Summary     string             `json:"summary,omitempty"`
-	Description string             `json:"description,omitempty"`
-	Parameters  []ParameterObject  `json:"parameters,omitempty"`
-	RequestBody *RequestBodyObject `json:"requestBody,omitempty"`
+	Tags        []string               `json:"tags,omitempty"`
+	OperationID string                 `json:"operationId,omitempty"`
+	Summary     string                 `json:"summary,omitempty"`
+	Description string                 `json:"description,omitempty"`
+	Parameters  []ParameterObject      `json:"parameters,omitempty"`
+	Headers     *orderedmap.OrderedMap `json:"headers,omitempty"`
+	RequestBody *RequestBodyObject     `json:"requestBody,omitempty"`
 
 	// Tags
 	// ExternalDocs
@@ -205,6 +206,11 @@ type HeaderObject struct {
 
 	// Ref is used when HeaderObject is as a ReferenceObject
 	Ref string `json:"$ref,omitempty"`
+}
+
+type ResponseHeaderObject struct {
+	Schema      *SchemaObject `json:"schema,omitempty"`
+	Description string        `json:"description,omitempty"`
 }
 
 type ComponentsOjbect struct {
