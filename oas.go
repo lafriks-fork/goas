@@ -72,13 +72,12 @@ type PathItemObject struct {
 type OperationObject struct {
 	Responses ResponsesObject `json:"responses"` // Required
 
-	Tags        []string               `json:"tags,omitempty"`
-	OperationID string                 `json:"operationId,omitempty"`
-	Summary     string                 `json:"summary,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Parameters  []ParameterObject      `json:"parameters,omitempty"`
-	Headers     *orderedmap.OrderedMap `json:"headers,omitempty"`
-	RequestBody *RequestBodyObject     `json:"requestBody,omitempty"`
+	Tags        []string           `json:"tags,omitempty"`
+	OperationID string             `json:"operationId,omitempty"`
+	Summary     string             `json:"summary,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Parameters  []ParameterObject  `json:"parameters,omitempty"`
+	RequestBody *RequestBodyObject `json:"requestBody,omitempty"`
 
 	// Tags
 	// ExternalDocs
@@ -191,7 +190,7 @@ type ResponsesObject map[string]*ResponseObject // [status]ResponseObject
 type ResponseObject struct {
 	Description string `json:"description"` // Required
 
-	Headers map[string]*HeaderObject    `json:"headers,omitempty"`
+	Headers *orderedmap.OrderedMap      `json:"headers,omitempty"`
 	Content map[string]*MediaTypeObject `json:"content,omitempty"`
 
 	// Ref is for ReferenceObject
@@ -200,15 +199,15 @@ type ResponseObject struct {
 	// Links
 }
 
+// type HeaderObject struct {
+// 	Description string `json:"description,omitempty"`
+// 	Type        string `json:"type,omitempty"`
+
+// 	// Ref is used when HeaderObject is as a ReferenceObject
+// 	Ref string `json:"$ref,omitempty"`
+// }
+
 type HeaderObject struct {
-	Description string `json:"description,omitempty"`
-	Type        string `json:"type,omitempty"`
-
-	// Ref is used when HeaderObject is as a ReferenceObject
-	Ref string `json:"$ref,omitempty"`
-}
-
-type ResponseHeaderObject struct {
 	Schema      *SchemaObject `json:"schema,omitempty"`
 	Description string        `json:"description,omitempty"`
 }

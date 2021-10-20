@@ -636,7 +636,6 @@ func (p *parser) parsePaths() error {
 func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comment) error {
 	operation := &OperationObject{
 		Responses: map[string]*ResponseObject{},
-		Headers:   orderedmap.New(),
 	}
 	if !strings.HasPrefix(pkgPath, p.ModulePath) {
 		// ignore this pkgName
@@ -646,6 +645,7 @@ func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comm
 		return nil
 	}
 	var err error
+	var curResponse *ResponseObject
 	for _, astComment := range astComments {
 		comment := strings.TrimSpace(strings.TrimLeft(astComment.Text, "/"))
 		if len(comment) == 0 {
@@ -659,12 +659,12 @@ func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comm
 			operation.OperationID = strings.TrimSpace(comment[len(attribute):])
 		case "@description":
 			operation.Description = strings.TrimSpace(strings.Join([]string{operation.Description, strings.TrimSpace(comment[len(attribute):])}, " "))
-		case "@header":
-			err = p.parseResponseHeader(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
 		case "@param":
 			err = p.parseParamComment(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
 		case "@success", "@failure":
-			err = p.parseResponseComment(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
+			curResponse, err = p.parseResponseComment(pkgPath, pkgName, operation, strings.TrimSpace(comment[len(attribute):]))
+		case "@header":
+			err = p.parseResponseHeader(pkgPath, pkgName, curResponse, strings.TrimSpace(comment[len(attribute):]))
 		case "@resource", "@tag":
 			resource := strings.TrimSpace(comment[len(attribute):])
 			if resource == "" {
@@ -683,7 +683,7 @@ func (p *parser) parseOperation(pkgPath, pkgName string, astComments []*ast.Comm
 	return nil
 }
 
-func (p *parser) parseResponseHeader(pkgPath, pkgName string, operation *OperationObject, comment string) error {
+func (p *parser) parseResponseHeader(pkgPath, pkgName string, response *ResponseObject, comment string) error {
 	// {name}       {goType}  {description}
 	// X-TotalCount int       "Total record count"
 	re := regexp.MustCompile(`([-\w]+)[\s]+([\w./\[\]]+)[\s]+"([^"]+)"`)
@@ -697,7 +697,7 @@ func (p *parser) parseResponseHeader(pkgPath, pkgName string, operation *Operati
 	goType := re.ReplaceAllString(matches[2], "[]")
 	description := matches[3]
 
-	headerObject := ResponseHeaderObject{
+	headerObject := HeaderObject{
 		Description: description,
 	}
 	if goType == "time.Time" {
@@ -706,13 +706,19 @@ func (p *parser) parseResponseHeader(pkgPath, pkgName string, operation *Operati
 		if err != nil {
 			p.debug("parseResponseComment cannot parse goType", goType)
 		}
-		operation.Headers.Set(name, headerObject)
+		if response.Headers == nil {
+			response.Headers = orderedmap.New()
+		}
+		response.Headers.Set(name, headerObject)
 	} else if isGoTypeOASType(goType) {
 		headerObject.Schema = &SchemaObject{
 			Type:   goTypesOASTypes[goType],
 			Format: goTypesOASFormats[goType],
 		}
-		operation.Headers.Set(name, headerObject)
+		if response.Headers == nil {
+			response.Headers = orderedmap.New()
+		}
+		response.Headers.Set(name, headerObject)
 	}
 	return nil
 }
@@ -837,19 +843,19 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 	return nil
 }
 
-func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *OperationObject, comment string) error {
+func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *OperationObject, comment string) (*ResponseObject, error) {
 	// {status}  {jsonType}  {goType}     {description}
 	// 201       object      models.User  "User Model"
 	re := regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/\[\]]+[\s]+)?[^"]*(.*)?`)
 	matches := re.FindStringSubmatch(comment)
 	if len(matches) < 2 {
-		return fmt.Errorf("parseResponseComment can not parse response comment \"%s\"", comment)
+		return nil, fmt.Errorf("parseResponseComment can not parse response comment \"%s\"", comment)
 	}
 
 	status := matches[1]
 	_, err := strconv.Atoi(matches[1])
 	if err != nil {
-		return fmt.Errorf("parseResponseComment: http status must be int, but got %s", status)
+		return nil, fmt.Errorf("parseResponseComment: http status must be int, but got %s", status)
 	}
 
 	responseObject := &ResponseObject{
@@ -883,7 +889,7 @@ func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *Operat
 		} else {
 			typeName, err := p.registerType(matches[2], pkgPath, pkgName, matches[3])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if isBasicGoType(typeName) {
 				responseObject.Content[ContentTypeText] = &MediaTypeObject{
@@ -902,7 +908,7 @@ func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *Operat
 	}
 	operation.Responses[status] = responseObject
 
-	return nil
+	return responseObject, nil
 }
 
 func (p *parser) parseRouteComment(operation *OperationObject, comment string) error {
