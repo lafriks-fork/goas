@@ -19,7 +19,7 @@ import (
 	"unicode"
 
 	"github.com/iancoleman/orderedmap"
-	"github.com/mikunalpha/go-module"
+	"golang.org/x/mod/modfile"
 )
 
 type parser struct {
@@ -201,7 +201,7 @@ func (p *parser) CreateOASFile(path string) error {
 
 	fd, err := os.Create(path)
 	if err != nil {
-		return fmt.Errorf("Can not create the file %s: %v", path, err)
+		return fmt.Errorf("can not create the file %s: %v", path, err)
 	}
 	defer fd.Close()
 
@@ -222,7 +222,7 @@ func (p *parser) parseInfo() error {
 
 	// Security Scopes are defined at a different level in the hierarchy as where they need to end up in the OpenAPI structure,
 	// so a temporary list is needed.
-	oauthScopes := make(map[string]map[string]string, 0)
+	oauthScopes := make(map[string]map[string]string)
 
 	if fileTree.Comments != nil {
 		for i := range fileTree.Comments {
@@ -315,22 +315,22 @@ func (p *parser) parseInfo() error {
 						scheme.OAuthFlows.AuthorizationCode = &SecuritySchemeOauthFlowObject{
 							AuthorizationUrl: fields[2],
 							TokenUrl:         fields[3],
-							Scopes:           make(map[string]string, 0),
+							Scopes:           make(map[string]string),
 						}
 					case "oauth2Implicit":
 						scheme.OAuthFlows.Implicit = &SecuritySchemeOauthFlowObject{
 							AuthorizationUrl: fields[2],
-							Scopes:           make(map[string]string, 0),
+							Scopes:           make(map[string]string),
 						}
 					case "oauth2ResourceOwnerCredentials":
 						scheme.OAuthFlows.ResourceOwnerPassword = &SecuritySchemeOauthFlowObject{
 							TokenUrl: fields[2],
-							Scopes:   make(map[string]string, 0),
+							Scopes:   make(map[string]string),
 						}
 					case "oauth2ClientCredentials":
 						scheme.OAuthFlows.ClientCredentials = &SecuritySchemeOauthFlowObject{
 							TokenUrl: fields[2],
-							Scopes:   make(map[string]string, 0),
+							Scopes:   make(map[string]string),
 						}
 					}
 					p.OpenAPI.Components.SecuritySchemes[fields[0]] = scheme
@@ -338,7 +338,7 @@ func (p *parser) parseInfo() error {
 					fields := strings.Split(value, " ")
 
 					if _, ok := oauthScopes[fields[0]]; !ok {
-						oauthScopes[fields[0]] = make(map[string]string, 0)
+						oauthScopes[fields[0]] = make(map[string]string)
 					}
 
 					oauthScopes[fields[0]][fields[1]] = strings.Join(fields[2:], " ")
@@ -348,7 +348,7 @@ func (p *parser) parseInfo() error {
 	}
 
 	// Apply security scopes to their security schemes
-	for scheme, _ := range p.OpenAPI.Components.SecuritySchemes {
+	for scheme := range p.OpenAPI.Components.SecuritySchemes {
 		if p.OpenAPI.Components.SecuritySchemes[scheme].Type == "oauth2" {
 			if scopes, ok := oauthScopes[scheme]; ok {
 				p.OpenAPI.Components.SecuritySchemes[scheme].OAuthFlows.ApplyScopes(scopes)
@@ -406,13 +406,14 @@ func (p *parser) parseGoMod() error {
 	if err != nil {
 		return err
 	}
-	goMod, err := module.Parse(b)
+	goMod, err := modfile.Parse(p.GoModFilePath, b, nil)
+	//goMod, err := module.Parse(b)
 	if err != nil {
 		return err
 	}
-	for i := range goMod.Requires {
+	for i := range goMod.Require {
 		pathRunes := []rune{}
-		for _, v := range goMod.Requires[i].Path {
+		for _, v := range goMod.Require[i].Mod.Path {
 			if !unicode.IsUpper(v) {
 				pathRunes = append(pathRunes, v)
 				continue
@@ -420,8 +421,8 @@ func (p *parser) parseGoMod() error {
 			pathRunes = append(pathRunes, '!')
 			pathRunes = append(pathRunes, unicode.ToLower(v))
 		}
-		pkgName := goMod.Requires[i].Path
-		pkgPath := filepath.Join(p.GoModCachePath, string(pathRunes)+"@"+goMod.Requires[i].Version)
+		pkgName := goMod.Require[i].Mod.Path
+		pkgPath := filepath.Join(p.GoModCachePath, string(pathRunes)+"@"+goMod.Require[i].Mod.Version)
 		pkgName = filepath.ToSlash(pkgName)
 		p.KnownPkgs = append(p.KnownPkgs, pkg{
 			Name: pkgName,
@@ -706,7 +707,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 		if operation.RequestBody == nil {
 			operation.RequestBody = &RequestBodyObject{
 				Content: map[string]*MediaTypeObject{
-					ContentTypeForm: &MediaTypeObject{
+					ContentTypeForm: {
 						Schema: SchemaObject{
 							Type:       "object",
 							Properties: orderedmap.New(),

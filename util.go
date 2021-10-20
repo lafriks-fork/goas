@@ -61,7 +61,7 @@ func getModuleNameFromGoMod(path string) string {
 }
 
 func isInStringList(list []string, s string) bool {
-	for i, _ := range list {
+	for i := range list {
 		if list[i] == s {
 			return true
 		}
@@ -147,9 +147,9 @@ func addSchemaRefLinkPrefix(name string) string {
 	return replaceBackslash("#/components/schemas/" + name)
 }
 
-func trimeSchemaRefLinkPrefix(ref string) string {
-	return strings.TrimPrefix(ref, "#/components/schemas/")
-}
+// func trimeSchemaRefLinkPrefix(ref string) string {
+// 	return strings.TrimPrefix(ref, "#/components/schemas/")
+// }
 
 func genSchemeaObjectID(name, pkgName, typeName string) string {
 	if len(name) != 0 {
