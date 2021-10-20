@@ -407,7 +407,6 @@ func (p *parser) parseGoMod() error {
 		return err
 	}
 	goMod, err := modfile.Parse(p.GoModFilePath, b, nil)
-	//goMod, err := module.Parse(b)
 	if err != nil {
 		return err
 	}
@@ -422,7 +421,15 @@ func (p *parser) parseGoMod() error {
 			pathRunes = append(pathRunes, unicode.ToLower(v))
 		}
 		pkgName := goMod.Require[i].Mod.Path
-		pkgPath := filepath.Join(p.GoModCachePath, string(pathRunes)+"@"+goMod.Require[i].Mod.Version)
+		pkgVersion := goMod.Require[i].Mod.Version
+		for _, r := range goMod.Replace {
+			if r.Old.Path == pkgName {
+				pkgName = r.New.Path
+				pkgVersion = r.New.Version
+				break
+			}
+		}
+		pkgPath := filepath.Join(p.GoModCachePath, string(pathRunes)+"@"+pkgVersion)
 		pkgName = filepath.ToSlash(pkgName)
 		p.KnownPkgs = append(p.KnownPkgs, pkg{
 			Name: pkgName,
