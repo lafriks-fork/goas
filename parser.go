@@ -591,6 +591,8 @@ func (p *parser) optimizeSchemaObjectIDs() error {
 		resolveIDs[fullName] = newName
 		obj.ID = newName
 		p.renameRef(name, newName)
+		delete(p.OpenAPI.Components.Schemas, name)
+		p.OpenAPI.Components.Schemas[newName] = obj
 	}
 	return nil
 }
