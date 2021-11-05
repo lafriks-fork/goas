@@ -496,12 +496,103 @@ func (p *parser) parseAPIs() error {
 		return err
 	}
 
-	// err = p.parsePaths()
-	// if err != nil {
-	// 	return err
-	// }
+	err = p.parsePaths()
+	if err != nil {
+		return err
+	}
 
-	return p.parsePaths()
+	return p.optimizeSchemaObjectIDs()
+}
+
+func renameRefInOperand(op *OperationObject, oldRef string, newRef string) {
+	if op == nil {
+		return
+	}
+	for _, prm := range op.Parameters {
+		if prm.Ref == oldRef {
+			prm.Ref = newRef
+		}
+	}
+	if op.RequestBody != nil && op.RequestBody.Ref == oldRef {
+		op.RequestBody.Ref = newRef
+	}
+	for _, resp := range op.Responses {
+		if resp.Ref == oldRef {
+			resp.Ref = newRef
+		}
+	}
+}
+
+func (p *parser) renameRef(oldName, newName string) {
+	if oldName == newName {
+		return
+	}
+	oldName = "#/components/schemas/" + oldName
+	newName = "#/components/schemas/" + newName
+	for _, obj := range p.OpenAPI.Components.Schemas {
+		if obj.Properties != nil {
+			for _, name := range obj.Properties.Keys() {
+				prop, _ := obj.Properties.Get(name)
+				if so, ok := prop.(*SchemaObject); ok && so.Ref == oldName {
+					so.Ref = newName
+				}
+			}
+		}
+		if obj.Items != nil && obj.Items.Ref == oldName {
+			obj.Items.Ref = newName
+		}
+	}
+	for _, path := range p.OpenAPI.Paths {
+		renameRefInOperand(path.Delete, oldName, newName)
+		renameRefInOperand(path.Get, oldName, newName)
+		renameRefInOperand(path.Head, oldName, newName)
+		renameRefInOperand(path.Options, oldName, newName)
+		renameRefInOperand(path.Patch, oldName, newName)
+		renameRefInOperand(path.Post, oldName, newName)
+		renameRefInOperand(path.Put, oldName, newName)
+		renameRefInOperand(path.Trace, oldName, newName)
+		if path.Ref == oldName {
+			path.Ref = newName
+		}
+	}
+}
+
+func (p *parser) optimizeSchemaObjectIDs() error {
+	usedIDs := make(map[string]string, len(p.OpenAPI.Components.Schemas))
+	resolveIDs := make(map[string]string, len(p.OpenAPI.Components.Schemas))
+	// Pre-resolve all special IDs
+	for name, obj := range p.OpenAPI.Components.Schemas {
+		parts := strings.Split(name, ".")
+		fullName := genSchemeaObjectID("", obj.PkgName, parts[len(parts)-1])
+		if fullName != name {
+			usedIDs[name] = fullName
+			resolveIDs[fullName] = name
+		}
+	}
+	for name, obj := range p.OpenAPI.Components.Schemas {
+		if _, ok := usedIDs[name]; ok {
+			continue
+		}
+		parts := strings.Split(name, ".")
+		fullName := genSchemeaObjectID("", obj.PkgName, parts[len(parts)-1])
+		if newName, ok := resolveIDs[fullName]; ok {
+			// This ID is duplicate, so we to deduplicate it
+			obj.ID = newName
+			delete(p.OpenAPI.Components.Schemas, name)
+			p.renameRef(name, newName)
+			continue
+		}
+		newName := parts[len(parts)-1]
+		i := 2
+		for _, ok := usedIDs[newName]; ok; i++ {
+			newName = fmt.Sprintf("%s%d", parts[len(parts)-1], i)
+		}
+		usedIDs[newName] = fullName
+		resolveIDs[fullName] = newName
+		obj.ID = newName
+		p.renameRef(name, newName)
+	}
+	return nil
 }
 
 func (p *parser) parseImportStatements() error {
