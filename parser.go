@@ -800,7 +800,7 @@ func (p *parser) parseResponseHeader(pkgPath, pkgName string, response *Response
 	headerObject := HeaderObject{
 		Description: description,
 	}
-	if goType == "time.Time" {
+	if strings.HasSuffix(goType, ".Time") || strings.HasSuffix(goType, ".Date") {
 		var err error
 		headerObject.Schema, err = p.parseSchemaObject("", pkgPath, pkgName, goType)
 		if err != nil {
@@ -887,7 +887,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 		if in == "path" {
 			parameterObject.Required = true
 		}
-		if goType == "time.Time" {
+		if strings.HasSuffix(goType, ".Time") || strings.HasSuffix(goType, ".Date") {
 			var err error
 			parameterObject.Schema, err = p.parseSchemaObject("", pkgPath, pkgName, goType)
 			if err != nil {
@@ -912,7 +912,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 		}
 	}
 
-	if strings.HasPrefix(goType, "[]") || strings.HasPrefix(goType, "map[]") || goType == "time.Time" {
+	if strings.HasPrefix(goType, "[]") || strings.HasPrefix(goType, "map[]") || strings.HasSuffix(goType, ".Time") || strings.HasSuffix(goType, ".Date") {
 		schema, err := p.parseSchemaObject(name, pkgPath, pkgName, goType)
 		if err != nil {
 			p.debug("parseResponseComment cannot parse goType", goType)
@@ -1104,7 +1104,11 @@ func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*Sc
 		schemaObject.Properties = orderedmap.New()
 		schemaObject.Properties.Set("key", schemaProperty)
 		return &schemaObject, nil
-	} else if typeName == "time.Time" {
+	} else if strings.HasSuffix(typeName, ".Date") {
+		schemaObject.Type = "string"
+		schemaObject.Format = "date"
+		return &schemaObject, nil
+	} else if strings.HasSuffix(typeName, ".Time") {
 		schemaObject.Type = "string"
 		schemaObject.Format = "date-time"
 		return &schemaObject, nil
@@ -1256,7 +1260,7 @@ astFieldsLoop:
 				p.debug(err)
 				return
 			}
-		} else if typeAsString == "time.Time" {
+		} else if strings.HasSuffix(typeAsString, ".Time") || strings.HasSuffix(typeAsString, ".Date") {
 			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
@@ -1447,7 +1451,7 @@ astFieldsLoop:
 				p.debug(err)
 				return
 			}
-		} else if typeAsString == "time.Time" {
+		} else if strings.HasSuffix(typeAsString, ".Time") || strings.HasSuffix(typeAsString, ".Date") {
 			fieldSchema, err = p.parseSchemaObject("", pkgPath, pkgName, typeAsString)
 			if err != nil {
 				p.debug(err)
