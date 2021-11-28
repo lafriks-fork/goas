@@ -523,6 +523,23 @@ func renameRefInOperand(op *OperationObject, oldRef string, newRef string) {
 	}
 }
 
+func renameRefInSchemaObject(obj *SchemaObject, oldName, newName string) {
+	if obj.Ref == oldName {
+		obj.Ref = newName
+	}
+	if obj.Properties != nil {
+		for _, name := range obj.Properties.Keys() {
+			prop, _ := obj.Properties.Get(name)
+			if so, ok := prop.(*SchemaObject); ok {
+				renameRefInSchemaObject(so, oldName, newName)
+			}
+		}
+	}
+	if obj.Items != nil {
+		renameRefInSchemaObject(obj.Items, oldName, newName)
+	}
+}
+
 func (p *parser) renameRef(oldName, newName string) {
 	if oldName == newName {
 		return
@@ -530,17 +547,7 @@ func (p *parser) renameRef(oldName, newName string) {
 	oldName = "#/components/schemas/" + oldName
 	newName = "#/components/schemas/" + newName
 	for _, obj := range p.OpenAPI.Components.Schemas {
-		if obj.Properties != nil {
-			for _, name := range obj.Properties.Keys() {
-				prop, _ := obj.Properties.Get(name)
-				if so, ok := prop.(*SchemaObject); ok && so.Ref == oldName {
-					so.Ref = newName
-				}
-			}
-		}
-		if obj.Items != nil && obj.Items.Ref == oldName {
-			obj.Items.Ref = newName
-		}
+		renameRefInSchemaObject(obj, oldName, newName)
 	}
 	for _, path := range p.OpenAPI.Paths {
 		renameRefInOperand(path.Delete, oldName, newName)
@@ -586,6 +593,7 @@ func (p *parser) optimizeSchemaObjectIDs() error {
 		i := 2
 		for _, ok := usedIDs[newName]; ok; i++ {
 			newName = fmt.Sprintf("%s%d", parts[len(parts)-1], i)
+			_, ok = usedIDs[newName]
 		}
 		usedIDs[newName] = fullName
 		resolveIDs[fullName] = newName
@@ -1129,6 +1137,10 @@ func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*Sc
 		schemaObject.PkgName = pkgName
 		schemaObject.ID = genSchemeaObjectID(name, pkgName, typeName)
 		p.KnownIDSchema[schemaObject.ID] = &schemaObject
+		_, ok := p.OpenAPI.Components.Schemas[replaceBackslash(schemaObject.ID)]
+		if !ok {
+			p.OpenAPI.Components.Schemas[replaceBackslash(schemaObject.ID)] = &schemaObject
+		}
 	} else {
 		guessPkgName := strings.Join(typeNameParts[:len(typeNameParts)-1], "/")
 		guessPkgPath := ""
@@ -1169,6 +1181,10 @@ func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*Sc
 			schemaObject.PkgName = guessPkgName
 			schemaObject.ID = genSchemeaObjectID(name, guessPkgName, guessTypeName)
 			p.KnownIDSchema[schemaObject.ID] = &schemaObject
+			_, ok := p.OpenAPI.Components.Schemas[replaceBackslash(schemaObject.ID)]
+			if !ok {
+				p.OpenAPI.Components.Schemas[replaceBackslash(schemaObject.ID)] = &schemaObject
+			}
 		}
 		pkgPath, pkgName = guessPkgPath, guessPkgName
 	}
