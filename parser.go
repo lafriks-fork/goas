@@ -411,23 +411,26 @@ func (p *parser) parseGoMod() error {
 		return err
 	}
 	for i := range goMod.Require {
+		pkgName := goMod.Require[i].Mod.Path
+		pkgVersion := goMod.Require[i].Mod.Version
+
+		path := goMod.Require[i].Mod.Path
+		for _, r := range goMod.Replace {
+			if r.Old.Path == pkgName {
+				path = r.New.Path
+				pkgVersion = r.New.Version
+				break
+			}
+		}
+
 		pathRunes := []rune{}
-		for _, v := range goMod.Require[i].Mod.Path {
+		for _, v := range path {
 			if !unicode.IsUpper(v) {
 				pathRunes = append(pathRunes, v)
 				continue
 			}
 			pathRunes = append(pathRunes, '!')
 			pathRunes = append(pathRunes, unicode.ToLower(v))
-		}
-		pkgName := goMod.Require[i].Mod.Path
-		pkgVersion := goMod.Require[i].Mod.Version
-		for _, r := range goMod.Replace {
-			if r.Old.Path == pkgName {
-				pkgName = r.New.Path
-				pkgVersion = r.New.Version
-				break
-			}
 		}
 		pkgPath := filepath.Join(p.GoModCachePath, string(pathRunes)+"@"+pkgVersion)
 		pkgName = filepath.ToSlash(pkgName)
