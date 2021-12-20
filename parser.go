@@ -1193,8 +1193,11 @@ func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*Sc
 	}
 
 	if astIdent, ok := typeSpec.Type.(*ast.Ident); ok {
-		_ = astIdent
-	} else if astStructType, ok := typeSpec.Type.(*ast.StructType); ok {
+		if astIdent.Obj != nil && astIdent.Obj.Kind == ast.Typ {
+			typeSpec = astIdent.Obj.Decl.(*ast.TypeSpec)
+		}
+	}
+	if astStructType, ok := typeSpec.Type.(*ast.StructType); ok {
 		schemaObject.Type = "object"
 		if astStructType.Fields != nil {
 			p.parseSchemaPropertiesFromStructFields(pkgPath, pkgName, &schemaObject, astStructType.Fields.List)
