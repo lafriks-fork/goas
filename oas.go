@@ -5,9 +5,10 @@ import "github.com/iancoleman/orderedmap"
 const (
 	OpenAPIVersion = "3.0.0"
 
-	ContentTypeText = "text/plain"
-	ContentTypeJson = "application/json"
-	ContentTypeForm = "multipart/form-data"
+	ContentTypeText        = "text/plain"
+	ContentTypeJson        = "application/json"
+	ContentTypeOctetStream = "application/octet-stream"
+	ContentTypeForm        = "multipart/form-data"
 )
 
 type OpenAPIObject struct {

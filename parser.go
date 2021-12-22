@@ -955,8 +955,9 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 }
 
 func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *OperationObject, comment string) (*ResponseObject, error) {
-	// {status}  {jsonType}  {goType}     {description}
-	// 201       object      models.User  "User Model"
+	// {status}  {jsonType}  {goType|binaryContentType}     {description}
+	// 201       object      models.User                    "User Model"
+	// 200       file        application/pdf                "A PDF file"
 	re := regexp.MustCompile(`([\d]+)[\s]+([\w\{\}]+)[\s]+([\w\-\.\/\[\]]+[\s]+)?[^"]*(.*)?`)
 	matches := re.FindStringSubmatch(comment)
 	if len(matches) < 2 {
@@ -972,11 +973,28 @@ func (p *parser) parseResponseComment(pkgPath, pkgName string, operation *Operat
 	responseObject := &ResponseObject{
 		Content: map[string]*MediaTypeObject{},
 	}
+	if o, ok := operation.Responses[status]; ok && o != nil {
+		responseObject = o
+	}
 
 	matches[2] = strings.Trim(strings.TrimSpace(matches[2]), "{}")
 	matches[3] = strings.TrimSpace(matches[3])
 
 	switch matches[2] {
+	case "file":
+		contentType := ContentTypeOctetStream
+		if len(matches) > 3 {
+			contentType = matches[3]
+			responseObject.Description = strings.Trim(matches[4], "\"")
+		} else if len(matches) > 2 {
+			responseObject.Description = strings.Trim(matches[3], "\"")
+		}
+		responseObject.Content[contentType] = &MediaTypeObject{
+			Schema: SchemaObject{
+				Type:   "string",
+				Format: "binary",
+			},
+		}
 	case "empty":
 		if len(matches) > 3 {
 			responseObject.Description = strings.Trim(matches[4], "\"")
