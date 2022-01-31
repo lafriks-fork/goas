@@ -153,6 +153,7 @@ type SchemaObject struct {
 	MaxLength   *int64                 `json:"maxLength,omitempty"`
 	MinItems    *int64                 `json:"minItems,omitempty"`
 	MaxItems    *int64                 `json:"maxItems,omitempty"`
+	Enum        []interface{}          `json:"enum,omitempty"`
 
 	// Ref is used when SchemaObject is as a ReferenceObject
 	Ref string `json:"$ref,omitempty"`

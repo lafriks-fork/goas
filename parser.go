@@ -22,6 +22,8 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+var splitParamsRegex = regexp.MustCompile(`'[^']*'|\S+`)
+
 type parser struct {
 	ModulePath string
 	ModuleName string
@@ -1327,7 +1329,7 @@ astFieldsLoop:
 				}
 				fieldSchema.Ref = addSchemaRefLinkPrefix(fieldSchemaSchemeaObjectID)
 			}
-			//fieldSchema.AdditionalProperties = false
+			// fieldSchema.AdditionalProperties = false
 		} else if isGoTypeOASType(typeAsString) {
 			fieldSchema.Type = goTypesOASTypes[typeAsString]
 		}
@@ -1453,6 +1455,14 @@ astFieldsLoop:
 								fieldSchema.Maximum = &i
 							}
 						}
+					case "oneof":
+						vals := splitParamsRegex.FindAllString(pt[1], -1)
+						enumVals := make([]interface{}, len(vals))
+						for i := 0; i < len(vals); i++ {
+							enumVals[i] = strings.Replace(vals[i], "'", "", -1)
+						}
+						// TODO: nullable should add null value
+						fieldSchema.Enum = enumVals
 					}
 				}
 			}
