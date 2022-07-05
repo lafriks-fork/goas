@@ -617,7 +617,9 @@ func (p *parser) parseImportStatements() error {
 
 		astPkgs, err := p.getPkgAst(pkgPath)
 		if err != nil {
-			return fmt.Errorf("parseImportStatements: parse of %s package cause error: %s", pkgPath, err)
+			// Ignore packages that can not be parsed
+			// return fmt.Errorf("parseImportStatements: parse of %s package cause error: %s", pkgPath, err)
+			continue
 		}
 
 		p.PkgNameImportedPkgAlias[pkgName] = map[string][]string{}
