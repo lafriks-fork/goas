@@ -670,7 +670,9 @@ func (p *parser) parseTypeSpecs() error {
 		}
 		astPkgs, err := p.getPkgAst(pkgPath)
 		if err != nil {
-			return fmt.Errorf("parseTypeSpecs: parse of %s package cause error: %s", pkgPath, err)
+			// Ignore packages that can not be parsed
+			// return fmt.Errorf("parseTypeSpecs: parse of %s package cause error: %s", pkgPath, err)
+			continue
 		}
 		for _, astPackage := range astPkgs {
 			for _, astFile := range astPackage.Files {
@@ -727,7 +729,9 @@ func (p *parser) parsePaths() error {
 
 		astPkgs, err := p.getPkgAst(pkgPath)
 		if err != nil {
-			return fmt.Errorf("parsePaths: parse of %s package cause error: %s", pkgPath, err)
+			// Ignore packages that can not be parsed
+			// return fmt.Errorf("parsePaths: parse of %s package cause error: %s", pkgPath, err)
+			continue
 		}
 		for _, astPackage := range astPkgs {
 			for _, astFile := range astPackage.Files {
