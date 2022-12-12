@@ -1425,9 +1425,12 @@ astFieldsLoop:
 
 			if validate := astFieldTag.Get("validate"); validate != "" {
 				validations := strings.Split(validate, ",")
+				var hasDive bool
 				for _, v := range validations {
 					pt := strings.SplitN(v, "=", 2)
 					switch pt[0] {
+					case "dive":
+						hasDive = true
 					case "required":
 						isRequired = true
 					case "uuid_rfc4122":
@@ -1438,9 +1441,19 @@ astFieldsLoop:
 							return
 						} else {
 							if isArray {
-								fieldSchema.MinItems = &i
-								if i == 0 {
-									fieldSchema.Nullable = true
+								if hasDive {
+									if fieldSchema.Items != nil && fieldSchema.Items.Type != "" {
+										if fieldSchema.Items.Type == "string" {
+											fieldSchema.Items.MinLength = &i
+										} else {
+											fieldSchema.Items.Minimum = &i
+										}
+									}
+								} else {
+									fieldSchema.MinItems = &i
+									if i == 0 {
+										fieldSchema.Nullable = true
+									}
 								}
 							} else if fieldSchema.Type == "string" {
 								fieldSchema.MinLength = &i
@@ -1454,7 +1467,17 @@ astFieldsLoop:
 							return
 						} else {
 							if isArray {
-								fieldSchema.MaxItems = &i
+								if hasDive {
+									if fieldSchema.Items != nil && fieldSchema.Items.Type != "" {
+										if fieldSchema.Items.Type == "string" {
+											fieldSchema.Items.MaxLength = &i
+										} else {
+											fieldSchema.Items.Maximum = &i
+										}
+									}
+								} else {
+									fieldSchema.MaxItems = &i
+								}
 							} else if fieldSchema.Type == "string" {
 								fieldSchema.MaxLength = &i
 							} else {
