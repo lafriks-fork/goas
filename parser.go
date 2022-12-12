@@ -1496,6 +1496,14 @@ astFieldsLoop:
 				}
 			}
 
+			if format := astFieldTag.Get("format"); format != "" || fieldSchema.Type == "string" {
+				if fieldSchema.Format == "date-time" || (format == "date-time" || format == "date") {
+					fieldSchema.Format = format
+				} else if fieldSchema.Format == "" {
+					fieldSchema.Format = format
+				}
+			}
+
 			if _, ok := astFieldTag.Lookup("required"); ok || isRequired {
 				structSchema.Required = append(structSchema.Required, name)
 			}
