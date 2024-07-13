@@ -6,7 +6,7 @@ import (
 	"go/ast"
 	goparser "go/parser"
 	"go/token"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,7 +18,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/iancoleman/orderedmap"
 	"golang.org/x/mod/modfile"
 )
 
@@ -176,7 +175,7 @@ func NewParser(modulePath, mainFilePath, handlerPath string, debug bool) (*parse
 	return p, nil
 }
 
-func (p *parser) CreateOASFile(path string) error {
+func (p *parser) CreateOAS(r io.Writer) error {
 	// parse basic info
 	err := p.parseInfo()
 	if err != nil {
@@ -201,19 +200,23 @@ func (p *parser) CreateOASFile(path string) error {
 		return err
 	}
 
+	output, err := json.MarshalIndent(p.OpenAPI, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	_, err = r.Write(output)
+	return err
+}
+
+func (p *parser) CreateOASFile(path string) error {
 	fd, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("can not create the file %s: %v", path, err)
 	}
 	defer fd.Close()
 
-	output, err := json.MarshalIndent(p.OpenAPI, "", "  ")
-	if err != nil {
-		return err
-	}
-	_, err = fd.WriteString(string(output))
-
-	return err
+	return p.CreateOAS(fd)
 }
 
 func (p *parser) parseInfo() error {
@@ -404,7 +407,7 @@ func (p *parser) parseModule() error {
 }
 
 func (p *parser) parseGoMod() error {
-	b, err := ioutil.ReadFile(p.GoModFilePath)
+	b, err := os.ReadFile(p.GoModFilePath)
 	if err != nil {
 		return err
 	}
@@ -534,9 +537,8 @@ func renameRefInSchemaObject(obj *SchemaObject, oldName, newName string) {
 	}
 	if obj.Properties != nil {
 		for _, name := range obj.Properties.Keys() {
-			prop, _ := obj.Properties.Get(name)
-			if so, ok := prop.(*SchemaObject); ok {
-				renameRefInSchemaObject(so, oldName, newName)
+			if prop, ok := obj.Properties.Get(name); ok {
+				renameRefInSchemaObject(prop, oldName, newName)
 			}
 		}
 	}
@@ -826,7 +828,7 @@ func (p *parser) parseResponseHeader(pkgPath, pkgName string, response *Response
 			p.debug("parseResponseComment cannot parse goType", goType)
 		}
 		if response.Headers == nil {
-			response.Headers = orderedmap.New()
+			response.Headers = NewHeaders()
 		}
 		response.Headers.Set(name, headerObject)
 	} else if isGoTypeOASType(goType) {
@@ -835,7 +837,7 @@ func (p *parser) parseResponseHeader(pkgPath, pkgName string, response *Response
 			Format: goTypesOASFormats[goType],
 		}
 		if response.Headers == nil {
-			response.Headers = orderedmap.New()
+			response.Headers = NewHeaders()
 		}
 		response.Headers.Set(name, headerObject)
 	}
@@ -872,7 +874,7 @@ func (p *parser) parseParamComment(pkgPath, pkgName string, operation *Operation
 					ContentTypeForm: {
 						Schema: SchemaObject{
 							Type:       "object",
-							Properties: orderedmap.New(),
+							Properties: NewProperties(),
 						},
 					},
 				},
@@ -1138,7 +1140,7 @@ func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*Sc
 		if err != nil {
 			return nil, err
 		}
-		schemaObject.Properties = orderedmap.New()
+		schemaObject.Properties = NewProperties()
 		schemaObject.Properties.Set("key", schemaProperty)
 		return &schemaObject, nil
 	} else if strings.HasSuffix(typeName, ".Date") {
@@ -1245,7 +1247,7 @@ func (p *parser) parseSchemaObject(name, pkgPath, pkgName, typeName string) (*Sc
 		}
 	} else if astMapType, ok := typeSpec.Type.(*ast.MapType); ok {
 		schemaObject.Type = "object"
-		schemaObject.Properties = orderedmap.New()
+		schemaObject.Properties = NewProperties()
 		propertySchema := &SchemaObject{}
 		schemaObject.Properties.Set("key", propertySchema)
 		typeAsString := p.getTypeAsString(astMapType.Value)
@@ -1282,7 +1284,7 @@ func (p *parser) parseSchemaPropertiesFromStructFields(pkgPath, pkgName string, 
 		return
 	}
 	var err error
-	structSchema.Properties = orderedmap.New()
+	structSchema.Properties = NewProperties()
 	if structSchema.DisabledFieldNames == nil {
 		structSchema.DisabledFieldNames = map[string]struct{}{}
 	}
@@ -1583,8 +1585,12 @@ astFieldsLoop:
 				refSchema, ok := p.KnownIDSchema[fieldSchema.ID]
 				if ok {
 					for _, propertyName := range refSchema.Properties.Keys() {
-						refPropertySchema, _ := refSchema.Properties.Get(propertyName)
-						_, disabled := structSchema.DisabledFieldNames[refPropertySchema.(*SchemaObject).FieldName]
+						refPropertySchema, ok := refSchema.Properties.Get(propertyName)
+						if !ok {
+							continue
+						}
+
+						_, disabled := structSchema.DisabledFieldNames[refPropertySchema.FieldName]
 						if disabled {
 							continue
 						}

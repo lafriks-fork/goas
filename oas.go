@@ -1,6 +1,11 @@
 package goas
 
-import "github.com/iancoleman/orderedmap"
+import (
+	"bytes"
+	"encoding/json"
+
+	"github.com/elliotchance/orderedmap/v2"
+)
 
 const (
 	OpenAPIVersion = "3.0.0"
@@ -132,28 +137,79 @@ type MediaTypeObject struct {
 	// Encoding
 }
 
+type Properties struct {
+	*orderedmap.OrderedMap[string, *SchemaObject]
+}
+
+func NewProperties() *Properties {
+	return &Properties{orderedmap.NewOrderedMap[string, *SchemaObject]()}
+}
+
+func (p *Properties) MarshalJSON() ([]byte, error) {
+	if p == nil {
+		return []byte("null"), nil
+	}
+
+	var buf bytes.Buffer
+	if err := buf.WriteByte('{'); err != nil {
+		return nil, err
+	}
+
+	encoder := json.NewEncoder(&buf)
+	first := true
+
+	for el := p.Front(); el != nil; el = el.Next() {
+		if !first {
+			if err := buf.WriteByte(','); err != nil {
+				return nil, err
+			}
+		}
+		first = false
+
+		// add key
+		if err := encoder.Encode(el.Key); err != nil {
+			return nil, err
+		}
+
+		if err := buf.WriteByte(':'); err != nil {
+			return nil, err
+		}
+
+		// add value
+		if err := encoder.Encode(el.Value); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := buf.WriteByte('}'); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 type SchemaObject struct {
 	ID                 string              `json:"-"` // For goas
 	PkgName            string              `json:"-"` // For goas
 	FieldName          string              `json:"-"` // For goas
 	DisabledFieldNames map[string]struct{} `json:"-"` // For goas
 
-	Type        string                 `json:"type,omitempty"`
-	Format      string                 `json:"format,omitempty"`
-	Required    []string               `json:"required,omitempty"`
-	Properties  *orderedmap.OrderedMap `json:"properties,omitempty"`
-	Description string                 `json:"description,omitempty"`
-	Items       *SchemaObject          `json:"items,omitempty"` // use ptr to prevent recursive error
-	Example     interface{}            `json:"example,omitempty"`
-	Deprecated  bool                   `json:"deprecated,omitempty"`
-	Nullable    bool                   `json:"nullable,omitempty"`
-	Minimum     *int64                 `json:"minimum,omitempty"`
-	Maximum     *int64                 `json:"maximum,omitempty"`
-	MinLength   *int64                 `json:"minLength,omitempty"`
-	MaxLength   *int64                 `json:"maxLength,omitempty"`
-	MinItems    *int64                 `json:"minItems,omitempty"`
-	MaxItems    *int64                 `json:"maxItems,omitempty"`
-	Enum        []interface{}          `json:"enum,omitempty"`
+	Type        string        `json:"type,omitempty"`
+	Format      string        `json:"format,omitempty"`
+	Required    []string      `json:"required,omitempty"`
+	Properties  *Properties   `json:"properties,omitempty"`
+	Description string        `json:"description,omitempty"`
+	Items       *SchemaObject `json:"items,omitempty"` // use ptr to prevent recursive error
+	Example     interface{}   `json:"example,omitempty"`
+	Deprecated  bool          `json:"deprecated,omitempty"`
+	Nullable    bool          `json:"nullable,omitempty"`
+	Minimum     *int64        `json:"minimum,omitempty"`
+	Maximum     *int64        `json:"maximum,omitempty"`
+	MinLength   *int64        `json:"minLength,omitempty"`
+	MaxLength   *int64        `json:"maxLength,omitempty"`
+	MinItems    *int64        `json:"minItems,omitempty"`
+	MaxItems    *int64        `json:"maxItems,omitempty"`
+	Enum        []interface{} `json:"enum,omitempty"`
 
 	// Ref is used when SchemaObject is as a ReferenceObject
 	Ref string `json:"$ref,omitempty"`
@@ -189,10 +245,61 @@ type SchemaObject struct {
 
 type ResponsesObject map[string]*ResponseObject // [status]ResponseObject
 
+type Headers struct {
+	*orderedmap.OrderedMap[string, HeaderObject]
+}
+
+func NewHeaders() *Headers {
+	return &Headers{orderedmap.NewOrderedMap[string, HeaderObject]()}
+}
+
+func (h *Headers) MarshalJSON() ([]byte, error) {
+	if h == nil {
+		return []byte("null"), nil
+	}
+
+	var buf bytes.Buffer
+	if err := buf.WriteByte('{'); err != nil {
+		return nil, err
+	}
+
+	encoder := json.NewEncoder(&buf)
+	first := true
+
+	for el := h.Front(); el != nil; el = el.Next() {
+		if !first {
+			if err := buf.WriteByte(','); err != nil {
+				return nil, err
+			}
+		}
+		first = false
+
+		// add key
+		if err := encoder.Encode(el.Key); err != nil {
+			return nil, err
+		}
+
+		if err := buf.WriteByte(':'); err != nil {
+			return nil, err
+		}
+
+		// add value
+		if err := encoder.Encode(el.Value); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := buf.WriteByte('}'); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
 type ResponseObject struct {
 	Description string `json:"description"` // Required
 
-	Headers *orderedmap.OrderedMap      `json:"headers,omitempty"`
+	Headers *Headers                    `json:"headers,omitempty"`
 	Content map[string]*MediaTypeObject `json:"content,omitempty"`
 
 	// Ref is for ReferenceObject
