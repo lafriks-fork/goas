@@ -641,6 +641,7 @@ func (p *parser) parseImportStatements() error {
 						// p.debug(importedPkgAlias, importedPkgName)
 					} else {
 						s := strings.Split(importedPkgName, "/")
+						s = strings.Split(s[len(s)-1], "-")
 						importedPkgAlias = s[len(s)-1]
 					}
 
