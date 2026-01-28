@@ -1296,6 +1296,10 @@ astFieldsLoop:
 		}
 		fieldSchema := &SchemaObject{}
 		isArray := false
+		isPointer := false
+		if _, ok := astField.Type.(*ast.StarExpr); ok {
+			isPointer = true
+		}
 		typeAsString := p.getTypeAsString(astField.Type)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if strings.HasPrefix(typeAsString, "[]") {
@@ -1371,6 +1375,7 @@ astFieldsLoop:
 			}
 			tagValues = strings.Split(tagText, ",")
 			isRequired := false
+			isOmitEmpty := false
 			for _, v := range tagValues {
 				if v == "-" {
 					structSchema.DisabledFieldNames[name] = struct{}{}
@@ -1378,9 +1383,15 @@ astFieldsLoop:
 					continue astFieldsLoop
 				} else if v == "required" {
 					isRequired = true
-				} else if v != "" && v != "required" && v != "omitempty" {
+				} else if v == "omitempty" {
+					isOmitEmpty = true
+				} else if v != "" && v != "required" {
 					name = v
 				}
+			}
+
+			if isPointer && (!isRequired || isOmitEmpty) {
+				fieldSchema.Nullable = true
 			}
 
 			if tag := astFieldTag.Get("example"); tag != "" {
