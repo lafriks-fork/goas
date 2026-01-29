@@ -1296,6 +1296,7 @@ astFieldsLoop:
 		}
 		fieldSchema := &SchemaObject{}
 		isArray := false
+		_, isPointer := astField.Type.(*ast.StarExpr)
 		typeAsString := p.getTypeAsString(astField.Type)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if strings.HasPrefix(typeAsString, "[]") {
@@ -1371,6 +1372,7 @@ astFieldsLoop:
 			}
 			tagValues = strings.Split(tagText, ",")
 			isRequired := false
+			isOmitEmpty := false
 			for _, v := range tagValues {
 				if v == "-" {
 					structSchema.DisabledFieldNames[name] = struct{}{}
@@ -1378,7 +1380,9 @@ astFieldsLoop:
 					continue astFieldsLoop
 				} else if v == "required" {
 					isRequired = true
-				} else if v != "" && v != "required" && v != "omitempty" {
+				} else if v == "omitempty" {
+					isOmitEmpty = true
+				} else if v != "" {
 					name = v
 				}
 			}
@@ -1509,6 +1513,10 @@ astFieldsLoop:
 
 			if _, ok := astFieldTag.Lookup("required"); ok || isRequired {
 				structSchema.Required = append(structSchema.Required, name)
+			}
+
+			if isPointer && (!isRequired || isOmitEmpty) {
+				fieldSchema.Nullable = true
 			}
 
 			if astField.Doc != nil && len(strings.TrimSpace(astField.Doc.Text())) != 0 {
