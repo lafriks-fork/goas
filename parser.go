@@ -1385,13 +1385,9 @@ astFieldsLoop:
 					isRequired = true
 				} else if v == "omitempty" {
 					isOmitEmpty = true
-				} else if v != "" && v != "required" {
+				} else if v != "" {
 					name = v
 				}
-			}
-
-			if isPointer && (!isRequired || isOmitEmpty) {
-				fieldSchema.Nullable = true
 			}
 
 			if tag := astFieldTag.Get("example"); tag != "" {
@@ -1520,6 +1516,10 @@ astFieldsLoop:
 
 			if _, ok := astFieldTag.Lookup("required"); ok || isRequired {
 				structSchema.Required = append(structSchema.Required, name)
+			}
+
+			if isPointer && (!isRequired || isOmitEmpty) {
+				fieldSchema.Nullable = true
 			}
 
 			if astField.Doc != nil && len(strings.TrimSpace(astField.Doc.Text())) != 0 {
