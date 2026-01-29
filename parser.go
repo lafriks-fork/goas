@@ -1296,10 +1296,7 @@ astFieldsLoop:
 		}
 		fieldSchema := &SchemaObject{}
 		isArray := false
-		isPointer := false
-		if _, ok := astField.Type.(*ast.StarExpr); ok {
-			isPointer = true
-		}
+		_, isPointer := astField.Type.(*ast.StarExpr)
 		typeAsString := p.getTypeAsString(astField.Type)
 		typeAsString = strings.TrimLeft(typeAsString, "*")
 		if strings.HasPrefix(typeAsString, "[]") {
